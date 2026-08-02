@@ -10,19 +10,19 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    func
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 
 
-# Shared Timestamps Mixin
+# Shared Timestamps Mixin (Timezone-Aware)
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 
@@ -33,7 +33,7 @@ class GuildConfig(Base, TimestampMixin):
     guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     guild_name: Mapped[str] = mapped_column(String(100), nullable=False)
     prefix: Mapped[str] = mapped_column(String(5), nullable=False, server_default="!")
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="1")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
     def __repr__(self) -> str:
         return f"{self.guild_name} ({self.guild_id})"
@@ -47,7 +47,7 @@ class AFK(Base):
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     afk_reason: Mapped[str] = mapped_column(String(256), nullable=False)
-    since: Mapped[int] = mapped_column(Integer, nullable=False)
+    since: Mapped[int] = mapped_column(BigInteger, nullable=False)  # BigInteger for UNIX timestamp seconds
 
     __table_args__ = (
         UniqueConstraint("guild_id", "user_id", name="pk_afk"),
@@ -86,11 +86,11 @@ class MediaOnlyChannel(Base, TimestampMixin):
     sticky_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     whitelist_role_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     image_only: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="0"
+        Boolean, nullable=False, server_default="false"
     )
-    auto_mute: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    auto_mute: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     nsfw_bypass: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="1"
+        Boolean, nullable=False, server_default="true"
     )
 
     __table_args__ = (
@@ -173,8 +173,8 @@ class TempbanRecord(Base, TimestampMixin):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     moderator_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     tempban_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="1")
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("guild_id", "user_id", name="pk_tempban_records"),
@@ -203,7 +203,7 @@ class ModerationLogConfig(Base, TimestampMixin):
 
     guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="1")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
     def __repr__(self) -> str:
         return f"<ModerationLogConfig guild={self.guild_id} channel={self.channel_id}>"
@@ -258,7 +258,7 @@ class Autoresponder(Base, TimestampMixin):
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     trigger: Mapped[str] = mapped_column(String(256), nullable=False)
     response: Mapped[str] = mapped_column(Text, nullable=False)
-    wildcard: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    wildcard: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     __table_args__ = (
         UniqueConstraint("guild_id", "trigger", name="uq_guild_trigger"),
@@ -278,8 +278,8 @@ class WelcomeConfig(Base, TimestampMixin):
     message: Mapped[str | None] = mapped_column(
         Text, nullable=True, server_default="Welcome {user} to {server}!"
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
-    ping_user: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="1")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    ping_user: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
 
 # Leave Announcements Configuration
@@ -291,7 +291,7 @@ class LeaveConfig(Base, TimestampMixin):
     message: Mapped[str | None] = mapped_column(
         Text, nullable=True, server_default="{username} has left the server."
     )
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
 
 # Leveling Global Guild Parameters
@@ -299,7 +299,7 @@ class LevelingConfig(Base, TimestampMixin):
     __tablename__ = "leveling_config"
 
     guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     announcement_channel_id: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True
     )
@@ -339,3 +339,36 @@ class UserLevel(Base, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<UserLevel guild={self.guild_id} user={self.user_id} lvl={self.level}>"
+
+
+# Warning Punishment Configuration Rules (e.g. 3 warns -> kick, 5 warns -> ban)
+class WarningPunishmentConfig(Base, TimestampMixin):
+    __tablename__ = "warning_punishment_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    warn_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    punishment_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("guild_id", "warn_count", name="uq_guild_warn_count"),
+        Index("idx_warning_punishment_guild", "guild_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<WarningPunishmentConfig guild={self.guild_id} count={self.warn_count} action={self.punishment_type}>"
+
+
+# Automated Punishment Audit Log
+class EscalatedPunishmentLog(Base, TimestampMixin):
+    __tablename__ = "escalated_punishment_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    warn_count_at_trigger: Mapped[int] = mapped_column(Integer, nullable=False)
+    punishment_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    details: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
+    __table_args__ = (Index("idx_escalated_logs_guild_user", "guild_id", "user_id"),)

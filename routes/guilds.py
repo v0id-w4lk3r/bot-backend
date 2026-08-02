@@ -1,13 +1,14 @@
 from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.redis import redis_client
 from core.session import read_session_token
 from database.database import get_db
-from database.models import GuildConfig
+from database.db_helpers.guild import (
+    get_or_create_guild_config,
+    update_guild_config,
+)
 from settings.config import settings
 
 router = APIRouter(prefix="/guilds", tags=["guilds"])
@@ -28,7 +29,9 @@ def get_current_user(request: Request) -> dict[str, Any]:
 
 
 @router.get("")
-async def get_user_guilds(user: dict[str, Any] = Depends(get_current_user)) -> list[dict[str, Any]]:
+async def get_user_guilds(
+    user: dict[str, Any] = Depends(get_current_user)
+) -> list[dict[str, Any]]:
     """Returns servers where user has Manage Guild/Admin permissions."""
     access_token = user["access_token"]
 
@@ -39,7 +42,7 @@ async def get_user_guilds(user: dict[str, Any] = Depends(get_current_user)) -> l
         )
         if resp.status_code != 200:
             raise HTTPException(status_code=400, detail="Failed to fetch user guilds")
-        
+
         user_guilds = resp.json()
 
     manageable_guilds = []
@@ -49,12 +52,14 @@ async def get_user_guilds(user: dict[str, Any] = Depends(get_current_user)) -> l
         is_manager = (perms & MANAGE_GUILD_PERM) == MANAGE_GUILD_PERM
 
         if is_admin or is_manager or g.get("owner", False):
-            manageable_guilds.append({
-                "id": g["id"],
-                "name": g["name"],
-                "icon": g["icon"],
-                "owner": g.get("owner", False),
-            })
+            manageable_guilds.append(
+                {
+                    "id": g["id"],
+                    "name": g["name"],
+                    "icon": g["icon"],
+                    "owner": g.get("owner", False),
+                }
+            )
 
     return manageable_guilds
 
@@ -63,20 +68,16 @@ async def get_user_guilds(user: dict[str, Any] = Depends(get_current_user)) -> l
 async def get_guild_settings(
     guild_id: int,
     db: AsyncSession = Depends(get_db),
-    user: dict[str, Any] = Depends(get_current_user),
+    user: dict[str, Any] = Depends(get_current_user)
 ) -> dict[str, Any]:
-    """Fetch panel configurations for a single server."""
-    result = await db.execute(select(GuildConfig).where(GuildConfig.guild_id == guild_id))
-    config = result.scalar_one_or_none()
-
-    if not config:
-        return {"guild_id": guild_id, "prefix": "!", "is_active": False}
+    """Fetch panel configurations for a single server using DB helper."""
+    config = await get_or_create_guild_config(db, guild_id)
 
     return {
         "guild_id": config.guild_id,
         "guild_name": config.guild_name,
         "prefix": config.prefix,
-        "is_active": config.is_active,
+        "is_active": config.is_active
     }
 
 
@@ -85,27 +86,16 @@ async def update_guild_prefix(
     guild_id: int,
     new_prefix: str,
     db: AsyncSession = Depends(get_db),
-    user: dict[str, Any] = Depends(get_current_user),
+    user: dict[str, Any] = Depends(get_current_user)
 ) -> dict[str, Any]:
-    """Updates server prefix in DB and publishes event to Redis for Bot sync."""
+    """Updates server prefix in DB and triggers Redis sync via DB helper."""
     if len(new_prefix) > 5:
         raise HTTPException(status_code=400, detail="Prefix too long (max 5 chars)")
 
-    result = await db.execute(select(GuildConfig).where(GuildConfig.guild_id == guild_id))
-    config = result.scalar_one_or_none()
+    config = await update_guild_config(db, guild_id, prefix=new_prefix)
 
-    if config:
-        config.prefix = new_prefix
-    else:
-        config = GuildConfig(guild_id=guild_id, guild_name="Unknown Guild", prefix=new_prefix)
-        db.add(config)
-
-    await db.commit()
-
-    # Publish message to Redis channel so the running Bot updates cache immediately
-    await redis_client.publish(
-        "guild_settings_updated",
-        f'{{"guild_id": {guild_id}, "prefix": "{new_prefix}"}}'
-    )
-
-    return {"status": "success", "guild_id": guild_id, "prefix": new_prefix}
+    return {
+        "status": "success",
+        "guild_id": config.guild_id,
+        "prefix": config.prefix,
+    }
