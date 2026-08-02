@@ -1,20 +1,26 @@
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from database.database import init_db
-from settings.config import settings
+from core.redis import close_redis
+from database.database import close_database, init_db
 from settings.apps import register_routes
+from settings.config import settings
 from settings.middleware import register_middleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # 1. Startup Logic
     if settings.DB_CREATE_TABLES:
         await init_db()
 
     yield
+
+    # 2. Shutdown Cleanup Logic
+    await close_database()
+    await close_redis()
 
 
 app = FastAPI(

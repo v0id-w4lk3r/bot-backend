@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     # ENVIRONMENT
     ENV: str = "production"
 
-    # DATABASE
+    # DATABASE (PostgreSQL)
     DB_HOST: str = "localhost"
     DB_PORT: int = 5432
     DB_NAME: str = "my_bot_db"
@@ -16,14 +16,21 @@ class Settings(BaseSettings):
     DB_CREATE_TABLES: bool = False
     DB_CONNECT_TIMEOUT: float = 5.0
 
-    # DISCORD OAUTH2
+    # REDIS
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str = ""
+    REDIS_DB: int = 0
+
+    # DISCORD OAUTH2 & BOT
     DISCORD_CLIENT_ID: str = ""
     DISCORD_CLIENT_SECRET: str = ""
+    DISCORD_BOT_TOKEN: str = ""  # Needed for Bot API calls
     DISCORD_REDIRECT_URI: str = ""
     DISCORD_OAUTH_SCOPES: str = "identify guilds"
 
     # SECURITY
-    SECRET_KEY: str = "change-me"
+    SECRET_KEY: str = "change-me-to-a-very-long-secret-key"
     ALLOWED_ORIGINS: str = "http://localhost:3000"
     SESSION_COOKIE_NAME: str = "bot_panel_session"
     OAUTH_STATE_COOKIE_NAME: str = "discord_oauth_state"
@@ -41,10 +48,11 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [
-            origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")
+            origin.strip()
+            for origin in self.ALLOWED_ORIGINS.split(",")
             if origin.strip()
         ]
-    
+
     @property
     def DATABASE_URL(self) -> str:
         return (
@@ -53,6 +61,11 @@ class Settings(BaseSettings):
             f"@{self.DB_HOST}:{self.DB_PORT}"
             f"/{self.DB_NAME}"
         )
+
+    @property
+    def REDIS_URL(self) -> str:
+        auth = f":{self.REDIS_PASSWORD}@" if self.REDIS_PASSWORD else ""
+        return f"redis://{auth}{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     @property
     def auth_success_redirect_url(self) -> str:

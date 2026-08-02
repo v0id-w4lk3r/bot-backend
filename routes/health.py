@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from core.redis import check_redis
 from database.database import check_database
 from settings.config import settings
 
@@ -18,11 +19,12 @@ async def health() -> dict[str, str | bool]:
 async def database_health() -> dict[str, str]:
     try:
         await check_database()
+        await check_redis()
     except Exception as exc:
         message = str(exc) or exc.__class__.__name__
         raise HTTPException(
             status_code=503,
-            detail=f"Database is not ready: {message}",
+            detail=f"Service not ready: {message}",
         ) from exc
 
-    return {"status": "ok"}
+    return {"status": "ok", "postgres": "connected", "redis": "connected"}

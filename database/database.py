@@ -12,12 +12,9 @@ from sqlalchemy.ext.asyncio import (
 from database.base import Base
 from settings.config import settings
 
-
 engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
-    connect_args={
-        "timeout": settings.DB_CONNECT_TIMEOUT,
-    },
+    connect_args={"timeout": settings.DB_CONNECT_TIMEOUT},
     echo=settings.DB_ECHO,
     pool_pre_ping=True,
 )
@@ -26,10 +23,6 @@ SessionLocal = async_sessionmaker(
     engine,
     expire_on_commit=False,
 )
-
-
-def get_engine() -> AsyncEngine:
-    return engine
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -49,11 +42,7 @@ async def check_database() -> bool:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
 
-    await asyncio.wait_for(
-        _check(),
-        timeout=settings.DB_CONNECT_TIMEOUT,
-    )
-
+    await asyncio.wait_for(_check(), timeout=settings.DB_CONNECT_TIMEOUT)
     return True
 
 
